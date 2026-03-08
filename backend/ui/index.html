@@ -2,123 +2,126 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SmartCanvas Pro | Edge Engine</title>
+    <title>SmartCanvas Pro | Full Suite</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
     <style>
-        .glass { background: rgba(17, 24, 39, 0.8); backdrop-filter: blur(10px); }
-        .loader { border-top-color: #3b82f6; animation: spinner 1.5s linear infinite; }
-        @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .editor-input {
+            position: absolute; background: rgba(59, 130, 246, 0.05);
+            border: 1px solid transparent; color: transparent; outline: none;
+            text-align: center; font-size: 10px; cursor: text;
+        }
+        .editor-input:hover { border-color: rgba(59, 130, 246, 0.5); }
+        .editor-input:focus { color: #2563eb; background: white; border-color: #2563eb; z-index: 100; }
+        .workspace-box { overflow: auto; max-height: 75vh; background: #111827; border-radius: 1rem; }
     </style>
 </head>
-<body class="bg-[#0b0f1a] text-gray-100 min-h-screen font-sans">
-    <nav class="border-b border-gray-800 p-4 glass sticky top-0 z-50">
-        <div class="max-w-6xl mx-auto flex justify-between items-center">
-            <h1 class="text-xl font-black tracking-tighter text-blue-500">SMARTCANVAS <span class="text-gray-500 font-light">PRO</span></h1>
-            <div id="status-tag" class="text-xs font-mono text-green-500 uppercase">System Ready</div>
+<body class="bg-[#0b0f1a] text-gray-100 min-h-screen">
+    <nav class="border-b border-gray-800 p-4 bg-gray-900/90 backdrop-blur sticky top-0 z-50 flex justify-between items-center">
+        <h1 class="text-xl font-black text-blue-500 tracking-tighter">SMARTCANVAS <span class="text-white">PRO</span></h1>
+        <div id="zoom-ui" class="hidden flex items-center gap-3">
+            <span class="text-xs text-gray-500">ZOOM</span>
+            <input type="range" id="zoom-slider" min="0.5" max="3" step="0.1" value="1" class="w-32 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer">
         </div>
     </nav>
 
-    <main class="max-w-4xl mx-auto py-12 px-4">
-        <div id="drop-area" class="border-2 border-dashed border-gray-700 rounded-3xl p-16 text-center hover:border-blue-500 transition-all cursor-pointer bg-gray-900/50">
+    <main class="max-w-6xl mx-auto p-6">
+        <div id="drop-area" class="border-2 border-dashed border-gray-800 rounded-3xl p-20 text-center hover:border-blue-500 cursor-pointer transition-colors bg-gray-900/30">
             <input type="file" id="fileElem" class="hidden" accept="image/*">
-            <p class="text-xl font-medium">Upload Document for Neural Scan</p>
-            <p class="text-gray-500 mt-2">Tesseract.js will process text locally in your browser</p>
+            <p class="text-xl font-semibold">Drop Document to Analyze</p>
         </div>
 
-        <div id="preview-section" class="mt-12 hidden space-y-6">
-            <img id="img-view" class="w-full rounded-2xl border border-gray-800 shadow-2xl">
-            <div class="flex gap-4">
-                <button id="reset-btn" class="flex-1 py-4 rounded-xl bg-gray-800 font-bold">Reset</button>
-                <button id="process-btn" class="flex-[2] py-4 rounded-xl bg-blue-600 font-bold hover:bg-blue-500">Start OCR Scan</button>
+        <div id="editor-ui" class="hidden space-y-6">
+            <div class="workspace-box border border-gray-800 shadow-2xl">
+                <div id="zoom-wrapper" class="relative inline-block origin-top-left">
+                    <img id="img-view" class="block">
+                    <div id="overlay-layer" class="absolute top-0 left-0 w-full h-full"></div>
+                </div>
             </div>
-        </div>
 
-        <div id="results" class="mt-12 hidden">
-            <h3 class="text-xl font-bold mb-4">Detected Text Blocks</h3>
-            <div id="json-output" class="bg-gray-900 p-6 rounded-xl font-mono text-sm text-blue-300 overflow-x-auto"></div>
-            <button id="finalize-btn" class="w-full mt-6 py-4 rounded-xl bg-green-600 font-bold hover:bg-green-500">Apply Neural Inpainting & Export</button>
-        </div>
-
-        <div id="final-output-section" class="mt-12 hidden">
-            <h3 class="text-xl font-bold mb-4 text-green-400">Processed Result</h3>
-            <img id="final-img" class="w-full rounded-2xl border-2 border-green-900">
-            <a id="download-link" class="block text-center mt-4 text-blue-400 underline">Download Cleaned Document</a>
+            <div class="flex gap-4">
+                <button id="process-btn" class="flex-1 py-4 bg-blue-600 rounded-xl font-bold hover:bg-blue-500">1. Run Neural Scan</button>
+                <div id="final-actions" class="hidden flex-[2] flex gap-4">
+                    <button id="finalize-btn" class="flex-1 py-4 bg-green-600 rounded-xl font-bold hover:bg-green-500">2. Apply Synthesis</button>
+                    <button id="pdf-btn" class="hidden px-6 py-4 bg-red-600 rounded-xl font-bold hover:bg-red-500">Export PDF</button>
+                </div>
+            </div>
         </div>
     </main>
 
     <script>
         const fileElem = document.getElementById('fileElem');
-        const dropArea = document.getElementById('drop-area');
-        const preview = document.getElementById('preview-section');
         const imgView = document.getElementById('img-view');
-        const processBtn = document.getElementById('process-btn');
-        const results = document.getElementById('results');
-        const jsonOutput = document.getElementById('json-output');
-        const finalizeBtn = document.getElementById('finalize-btn');
-
+        const overlay = document.getElementById('overlay-layer');
+        const zoomWrapper = document.getElementById('zoom-wrapper');
+        const zoomSlider = document.getElementById('zoom-slider');
         let detectedBlocks = [];
 
-        dropArea.onclick = () => fileElem.click();
-        fileElem.onchange = () => {
-            const file = fileElem.files[0];
+        document.getElementById('drop-area').onclick = () => fileElem.click();
+
+        fileElem.onchange = (e) => {
+            const file = e.target.files[0];
             if (file) {
                 imgView.src = URL.createObjectURL(file);
-                preview.classList.remove('hidden');
-                dropArea.classList.add('hidden');
+                document.getElementById('drop-area').classList.add('hidden');
+                document.getElementById('editor-ui').classList.remove('hidden');
+                document.getElementById('zoom-ui').classList.remove('hidden');
             }
         };
 
-        processBtn.onclick = async () => {
-            processBtn.disabled = true;
-            processBtn.innerText = "Initializing Tesseract Engine...";
-            
-            try {
-                const worker = await Tesseract.createWorker('eng');
-                const { data: { words } } = await worker.recognize(fileElem.files[0]);
-                
-                detectedBlocks = words.map(w => ({
-                    text: w.text,
-                    x: w.bbox.x0, y: w.bbox.y0,
-                    w: w.bbox.x1 - w.bbox.x0, h: w.bbox.y1 - w.bbox.y0
-                }));
+        zoomSlider.oninput = (e) => zoomWrapper.style.transform = `scale(${e.target.value})`;
 
-                await worker.terminate();
-                results.classList.remove('hidden');
-                jsonOutput.innerText = JSON.stringify(detectedBlocks.slice(0, 5), null, 2) + "\n...and more";
-                processBtn.innerText = "Scan Successful";
-            } catch (err) {
-                alert("OCR Error: " + err.message);
-                processBtn.disabled = false;
-            }
+        document.getElementById('process-btn').onclick = async () => {
+            const btn = document.getElementById('process-btn');
+            btn.innerText = "Scanning Baselines...";
+            btn.disabled = true;
+
+            const worker = await Tesseract.createWorker('eng');
+            const { data: { words } } = await worker.recognize(fileElem.files[0]);
+            detectedBlocks = words.map(w => ({
+                text: w.text, x: w.bbox.x0, y: w.bbox.y0, w: w.bbox.x1 - w.bbox.x0, h: w.bbox.y1 - w.bbox.y0
+            }));
+            await worker.terminate();
+
+            overlay.innerHTML = '';
+            detectedBlocks.forEach((b, i) => {
+                const input = document.createElement('input');
+                input.className = "editor-input";
+                Object.assign(input.style, { left: b.x+'px', top: b.y+'px', width: b.w+'px', height: b.h+'px' });
+                input.value = b.text;
+                input.oninput = (e) => detectedBlocks[i].text = e.target.value;
+                overlay.appendChild(input);
+            });
+
+            btn.innerText = "Scan Complete";
+            document.getElementById('final-actions').classList.remove('hidden');
         };
 
-        finalizeBtn.onclick = async () => {
-            finalizeBtn.disabled = true;
-            finalizeBtn.innerText = "Sending to Render Backend...";
-            
-            const formData = new FormData();
-            formData.append('file', fileElem.files[0]);
-            formData.append('modified_blocks', JSON.stringify(detectedBlocks));
-
-            try {
-                const response = await fetch('/process-final', { method: 'POST', body: formData });
-                const blob = await response.blob();
-                const url = URL.createObjectURL(blob);
-                
-                document.getElementById('final-img').src = url;
-                document.getElementById('download-link').href = url;
-                document.getElementById('download-link').download = "cleaned_doc.jpg";
-                document.getElementById('final-output-section').classList.remove('hidden');
-                finalizeBtn.innerText = "Processing Complete";
-            } catch (err) {
-                alert("Backend Error: " + err.message);
-                finalizeBtn.disabled = false;
-            }
+        const getFormData = () => {
+            const fd = new FormData();
+            fd.append('file', fileElem.files[0]);
+            fd.append('modified_blocks', JSON.stringify(detectedBlocks));
+            return fd;
         };
 
-        document.getElementById('reset-btn').onclick = () => location.reload();
+        document.getElementById('finalize-btn').onclick = async () => {
+            document.getElementById('finalize-btn').innerText = "Synthesizing...";
+            const res = await fetch('/process-final', { method: 'POST', body: getFormData() });
+            const blob = await res.blob();
+            imgView.src = URL.createObjectURL(blob);
+            overlay.innerHTML = '';
+            document.getElementById('finalize-btn').innerText = "Synthesis Ready";
+            document.getElementById('pdf-btn').classList.remove('hidden');
+        };
+
+        document.getElementById('pdf-btn').onclick = async () => {
+            const res = await fetch('/export-pdf', { method: 'POST', body: getFormData() });
+            const blob = await res.blob();
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = "synthesized_document.pdf";
+            link.click();
+        };
     </script>
 </body>
 </html>
