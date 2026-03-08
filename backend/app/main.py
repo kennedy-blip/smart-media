@@ -127,6 +127,10 @@ async def process_final(
 # --- SERVER BOOT ---
 if __name__ == "__main__":
     import uvicorn
+    import os
     # Render provides the port via an environment variable
+    # If it's not found (like on your local PC), it defaults to 8000
     port = int(os.environ.get("PORT", 8000))
+    
+    # Use 0.0.0.0 so it's accessible to the outside world
     uvicorn.run(app, host="0.0.0.0", port=port)
