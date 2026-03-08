@@ -1,0 +1,13 @@
+fastapi>=0.115.0
+uvicorn>=0.27.0
+python-multipart>=0.0.6
+opencv-python-headless>=4.9.0.80
+Pillow>=11.3.0
+numpy>=2.1.0
+torch
+torchvision
+easyocr
+pydantic
+python-dotenv
+requests
+aiofiles
