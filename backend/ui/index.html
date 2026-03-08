@@ -2,48 +2,60 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>SmartCanvas Pro | Full Suite</title>
+    <title>SmartCanvas Pro | Forensic Suite</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
     <style>
         .editor-input {
             position: absolute; background: rgba(59, 130, 246, 0.05);
             border: 1px solid transparent; color: transparent; outline: none;
-            text-align: center; font-size: 10px; cursor: text;
+            text-align: center; transition: all 0.1s;
         }
         .editor-input:hover { border-color: rgba(59, 130, 246, 0.5); }
         .editor-input:focus { color: #2563eb; background: white; border-color: #2563eb; z-index: 100; }
-        .workspace-box { overflow: auto; max-height: 75vh; background: #111827; border-radius: 1rem; }
+        .stamp-active { cursor: crosshair !important; border: 2px solid #3b82f6 !important; }
+        .ghost-preview {
+            position: absolute; pointer-events: none; opacity: 0.5;
+            border: 2px dashed #ef4444; background: rgba(239, 68, 68, 0.1);
+            display: none; align-items: center; justify-content: center;
+        }
+        .bouncing-badge { animation: bounce 1s infinite; }
+        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
     </style>
 </head>
 <body class="bg-[#0b0f1a] text-gray-100 min-h-screen">
     <nav class="border-b border-gray-800 p-4 bg-gray-900/90 backdrop-blur sticky top-0 z-50 flex justify-between items-center">
-        <h1 class="text-xl font-black text-blue-500 tracking-tighter">SMARTCANVAS <span class="text-white">PRO</span></h1>
-        <div id="zoom-ui" class="hidden flex items-center gap-3">
-            <span class="text-xs text-gray-500">ZOOM</span>
-            <input type="range" id="zoom-slider" min="0.5" max="3" step="0.1" value="1" class="w-32 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+        <h1 class="text-xl font-black text-blue-500">SMARTCANVAS <span class="text-white">PRO</span></h1>
+        <div id="toolbar" class="hidden flex items-center gap-6">
+            <div class="flex items-center gap-2 text-[10px] font-bold text-gray-400">
+                <span>SCAN FILTER</span>
+                <input type="checkbox" id="filter-toggle" checked class="accent-blue-600">
+            </div>
+            <button id="stamp-btn" class="px-4 py-1.5 rounded bg-gray-800 text-xs border border-gray-700 hover:bg-gray-700">Stamp Mode</button>
+            <input type="range" id="zoom-slider" min="0.5" max="3" step="0.1" value="1" class="w-24">
         </div>
     </nav>
 
     <main class="max-w-6xl mx-auto p-6">
-        <div id="drop-area" class="border-2 border-dashed border-gray-800 rounded-3xl p-20 text-center hover:border-blue-500 cursor-pointer transition-colors bg-gray-900/30">
+        <div id="drop-area" class="border-2 border-dashed border-gray-800 rounded-3xl p-20 text-center bg-gray-900/30">
             <input type="file" id="fileElem" class="hidden" accept="image/*">
-            <p class="text-xl font-semibold">Drop Document to Analyze</p>
+            <p class="text-xl font-bold">Upload Forensic Target</p>
         </div>
 
-        <div id="editor-ui" class="hidden space-y-6">
-            <div class="workspace-box border border-gray-800 shadow-2xl">
+        <div id="editor-ui" class="hidden flex flex-col items-center gap-6">
+            <div id="workspace-container" class="relative overflow-auto max-h-[70vh] w-full border border-gray-800 rounded-2xl bg-[#111827]">
                 <div id="zoom-wrapper" class="relative inline-block origin-top-left">
                     <img id="img-view" class="block">
                     <div id="overlay-layer" class="absolute top-0 left-0 w-full h-full"></div>
+                    <div id="ghost" class="ghost-preview"><span class="text-[8px] text-red-500 font-bold">STAMP</span></div>
                 </div>
             </div>
-
-            <div class="flex gap-4">
-                <button id="process-btn" class="flex-1 py-4 bg-blue-600 rounded-xl font-bold hover:bg-blue-500">1. Run Neural Scan</button>
-                <div id="final-actions" class="hidden flex-[2] flex gap-4">
-                    <button id="finalize-btn" class="flex-1 py-4 bg-green-600 rounded-xl font-bold hover:bg-green-500">2. Apply Synthesis</button>
-                    <button id="pdf-btn" class="hidden px-6 py-4 bg-red-600 rounded-xl font-bold hover:bg-red-500">Export PDF</button>
+            <div id="stamp-badge" class="hidden bg-blue-600 px-6 py-2 rounded-full flex items-center gap-3 bouncing-badge"><span class="text-xs font-black">STAMP MODE ACTIVE</span></div>
+            <div class="flex gap-4 w-full max-w-2xl">
+                <button id="process-btn" class="flex-1 py-4 bg-blue-600 rounded-xl font-bold">1. Scan Baselines</button>
+                <div id="action-group" class="hidden flex-[2] flex gap-3">
+                    <button id="finalize-btn" class="flex-1 py-4 bg-green-600 rounded-xl font-bold">2. Synthesize</button>
+                    <button id="pdf-btn" class="px-6 py-4 bg-red-600 rounded-xl font-bold">PDF Export</button>
                 </div>
             </div>
         </div>
@@ -55,72 +67,87 @@
         const overlay = document.getElementById('overlay-layer');
         const zoomWrapper = document.getElementById('zoom-wrapper');
         const zoomSlider = document.getElementById('zoom-slider');
+        const ghost = document.getElementById('ghost');
         let detectedBlocks = [];
+        let isStampMode = false;
 
         document.getElementById('drop-area').onclick = () => fileElem.click();
-
         fileElem.onchange = (e) => {
             const file = e.target.files[0];
             if (file) {
                 imgView.src = URL.createObjectURL(file);
                 document.getElementById('drop-area').classList.add('hidden');
                 document.getElementById('editor-ui').classList.remove('hidden');
-                document.getElementById('zoom-ui').classList.remove('hidden');
+                document.getElementById('toolbar').classList.remove('hidden');
             }
         };
 
         zoomSlider.oninput = (e) => zoomWrapper.style.transform = `scale(${e.target.value})`;
+        document.getElementById('stamp-btn').onclick = () => {
+            isStampMode = true;
+            document.getElementById('workspace-container').classList.add('stamp-active');
+            document.getElementById('stamp-badge').classList.remove('hidden');
+        };
 
-        document.getElementById('process-btn').onclick = async () => {
-            const btn = document.getElementById('process-btn');
-            btn.innerText = "Scanning Baselines...";
-            btn.disabled = true;
+        zoomWrapper.onmousemove = (e) => {
+            if (!isStampMode) return;
+            ghost.style.display = 'flex';
+            ghost.style.left = e.offsetX - 40 + 'px'; ghost.style.top = e.offsetY - 12 + 'px';
+            ghost.style.width = '80px'; ghost.style.height = '24px';
+        };
 
-            const worker = await Tesseract.createWorker('eng');
-            const { data: { words } } = await worker.recognize(fileElem.files[0]);
-            detectedBlocks = words.map(w => ({
-                text: w.text, x: w.bbox.x0, y: w.bbox.y0, w: w.bbox.x1 - w.bbox.x0, h: w.bbox.y1 - w.bbox.y0
-            }));
-            await worker.terminate();
+        overlay.onclick = (e) => {
+            if (!isStampMode) return;
+            detectedBlocks.push({ text: "NEW BLOCK", x: e.offsetX - 40, y: e.offsetY - 12, w: 80, h: 24 });
+            renderOverlay();
+            isStampMode = false;
+            document.getElementById('workspace-container').classList.remove('stamp-active');
+            document.getElementById('stamp-badge').classList.add('hidden');
+            ghost.style.display = 'none';
+        };
 
+        const renderOverlay = () => {
             overlay.innerHTML = '';
             detectedBlocks.forEach((b, i) => {
                 const input = document.createElement('input');
                 input.className = "editor-input";
-                Object.assign(input.style, { left: b.x+'px', top: b.y+'px', width: b.w+'px', height: b.h+'px' });
+                Object.assign(input.style, { left: b.x+'px', top: b.y+'px', width: b.w+'px', height: b.h+'px', fontSize: (b.h * 0.65) + 'px' });
                 input.value = b.text;
                 input.oninput = (e) => detectedBlocks[i].text = e.target.value;
                 overlay.appendChild(input);
             });
-
-            btn.innerText = "Scan Complete";
-            document.getElementById('final-actions').classList.remove('hidden');
         };
 
-        const getFormData = () => {
+        document.getElementById('process-btn').onclick = async () => {
+            document.getElementById('process-btn').innerText = "Analyzing Pixel Density...";
+            const worker = await Tesseract.createWorker('eng');
+            const { data: { words } } = await worker.recognize(fileElem.files[0]);
+            detectedBlocks = words.map(w => ({ text: w.text, x: w.bbox.x0, y: w.bbox.y0, w: w.bbox.x1 - w.bbox.x0, h: w.bbox.y1 - w.bbox.y0 }));
+            await worker.terminate();
+            renderOverlay();
+            document.getElementById('process-btn').innerText = "Scan Complete";
+            document.getElementById('action-group').classList.remove('hidden');
+        };
+
+        const getFD = () => {
             const fd = new FormData();
             fd.append('file', fileElem.files[0]);
             fd.append('modified_blocks', JSON.stringify(detectedBlocks));
+            fd.append('scan_filter', document.getElementById('filter-toggle').checked);
             return fd;
         };
 
         document.getElementById('finalize-btn').onclick = async () => {
-            document.getElementById('finalize-btn').innerText = "Synthesizing...";
-            const res = await fetch('/process-final', { method: 'POST', body: getFormData() });
-            const blob = await res.blob();
-            imgView.src = URL.createObjectURL(blob);
+            const res = await fetch('/process-final', { method: 'POST', body: getFD() });
+            imgView.src = URL.createObjectURL(await res.blob());
             overlay.innerHTML = '';
-            document.getElementById('finalize-btn').innerText = "Synthesis Ready";
-            document.getElementById('pdf-btn').classList.remove('hidden');
         };
 
         document.getElementById('pdf-btn').onclick = async () => {
-            const res = await fetch('/export-pdf', { method: 'POST', body: getFormData() });
-            const blob = await res.blob();
+            const res = await fetch('/export-pdf', { method: 'POST', body: getFD() });
             const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = "synthesized_document.pdf";
-            link.click();
+            link.href = URL.createObjectURL(await res.blob());
+            link.download = "cleansed_doc.pdf"; link.click();
         };
     </script>
 </body>
