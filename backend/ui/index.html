@@ -3,105 +3,118 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SmartCanvas Pro | Neural Engine</title>
+    <title>SmartCanvas Pro | Edge Engine</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
     <style>
-        .gradient-border { border: 1px solid; border-image: linear-gradient(to right, #3b82f6, #8b5cf6) 1; }
         .glass { background: rgba(17, 24, 39, 0.8); backdrop-filter: blur(10px); }
+        .loader { border-top-color: #3b82f6; animation: spinner 1.5s linear infinite; }
+        @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="bg-[#0b0f1a] text-gray-100 min-h-screen font-sans">
     <nav class="border-b border-gray-800 p-4 glass sticky top-0 z-50">
         <div class="max-w-6xl mx-auto flex justify-between items-center">
-            <h1 class="text-xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
-                SMARTCANVAS <span class="text-gray-500 font-light">PRO</span>
-            </h1>
-            <div class="flex items-center gap-2">
-                <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                <span class="text-xs font-mono text-green-500 uppercase">Neural Engine Online</span>
-            </div>
+            <h1 class="text-xl font-black tracking-tighter text-blue-500">SMARTCANVAS <span class="text-gray-500 font-light">PRO</span></h1>
+            <div id="status-tag" class="text-xs font-mono text-green-500 uppercase">System Ready</div>
         </div>
-        
     </nav>
 
     <main class="max-w-4xl mx-auto py-12 px-4">
-        <div class="text-center mb-12">
-            <h2 class="text-5xl font-extrabold mb-4 tracking-tight">Document Processor</h2>
-            <p class="text-gray-400 text-lg">AI-Powered OCR & Intelligent Inpainting Engine</p>
-        </div>
-
-        <div id="drop-area" class="border-2 border-dashed border-gray-700 rounded-3xl p-16 text-center hover:border-blue-500 transition-all cursor-pointer bg-gray-900/50 group">
+        <div id="drop-area" class="border-2 border-dashed border-gray-700 rounded-3xl p-16 text-center hover:border-blue-500 transition-all cursor-pointer bg-gray-900/50">
             <input type="file" id="fileElem" class="hidden" accept="image/*">
-            <div class="space-y-6">
-                <div class="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center mx-auto group-hover:bg-blue-900/30 transition-colors">
-                    <svg class="w-10 h-10 text-gray-500 group-hover:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-                </div>
-                <div>
-                    <p class="text-xl font-medium">Select a Document</p>
-                    <p class="text-gray-500 mt-2">Drag and drop or click to browse</p>
-                </div>
-            </div>
+            <p class="text-xl font-medium">Upload Document for Neural Scan</p>
+            <p class="text-gray-500 mt-2">Tesseract.js will process text locally in your browser</p>
         </div>
 
-        <div id="preview-section" class="mt-12 hidden space-y-8">
-            <div class="relative rounded-2xl overflow-hidden border border-gray-800 shadow-2xl">
-                <img id="img-view" class="w-full h-auto">
-            </div>
-            
+        <div id="preview-section" class="mt-12 hidden space-y-6">
+            <img id="img-view" class="w-full rounded-2xl border border-gray-800 shadow-2xl">
             <div class="flex gap-4">
-                <button id="reset-btn" class="flex-1 py-4 rounded-xl bg-gray-800 hover:bg-gray-700 font-bold transition-all">Clear</button>
-                <button id="process-btn" class="flex-[2] py-4 rounded-xl bg-blue-600 hover:bg-blue-500 font-bold shadow-lg shadow-blue-900/20 transition-all">Run Neural Scan</button>
+                <button id="reset-btn" class="flex-1 py-4 rounded-xl bg-gray-800 font-bold">Reset</button>
+                <button id="process-btn" class="flex-[2] py-4 rounded-xl bg-blue-600 font-bold hover:bg-blue-500">Start OCR Scan</button>
             </div>
         </div>
 
         <div id="results" class="mt-12 hidden">
-            <h3 class="text-xl font-bold mb-4">OCR Extraction Results</h3>
-            <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden p-6 font-mono text-sm text-blue-300" id="json-output">
-                </div>
+            <h3 class="text-xl font-bold mb-4">Detected Text Blocks</h3>
+            <div id="json-output" class="bg-gray-900 p-6 rounded-xl font-mono text-sm text-blue-300 overflow-x-auto"></div>
+            <button id="finalize-btn" class="w-full mt-6 py-4 rounded-xl bg-green-600 font-bold hover:bg-green-500">Apply Neural Inpainting & Export</button>
+        </div>
+
+        <div id="final-output-section" class="mt-12 hidden">
+            <h3 class="text-xl font-bold mb-4 text-green-400">Processed Result</h3>
+            <img id="final-img" class="w-full rounded-2xl border-2 border-green-900">
+            <a id="download-link" class="block text-center mt-4 text-blue-400 underline">Download Cleaned Document</a>
         </div>
     </main>
 
     <script>
-        const dropArea = document.getElementById('drop-area');
         const fileElem = document.getElementById('fileElem');
+        const dropArea = document.getElementById('drop-area');
         const preview = document.getElementById('preview-section');
         const imgView = document.getElementById('img-view');
         const processBtn = document.getElementById('process-btn');
         const results = document.getElementById('results');
+        const jsonOutput = document.getElementById('json-output');
+        const finalizeBtn = document.getElementById('finalize-btn');
+
+        let detectedBlocks = [];
 
         dropArea.onclick = () => fileElem.click();
-
         fileElem.onchange = () => {
             const file = fileElem.files[0];
             if (file) {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    imgView.src = e.target.result;
-                    preview.classList.remove('hidden');
-                    dropArea.classList.add('hidden');
-                }
-                reader.readAsDataURL(file);
+                imgView.src = URL.createObjectURL(file);
+                preview.classList.remove('hidden');
+                dropArea.classList.add('hidden');
             }
         };
 
         processBtn.onclick = async () => {
             processBtn.disabled = true;
-            processBtn.innerText = "Processing Neural Weights...";
+            processBtn.innerText = "Initializing Tesseract Engine...";
+            
+            try {
+                const worker = await Tesseract.createWorker('eng');
+                const { data: { words } } = await worker.recognize(fileElem.files[0]);
+                
+                detectedBlocks = words.map(w => ({
+                    text: w.text,
+                    x: w.bbox.x0, y: w.bbox.y0,
+                    w: w.bbox.x1 - w.bbox.x0, h: w.bbox.y1 - w.bbox.y0
+                }));
+
+                await worker.terminate();
+                results.classList.remove('hidden');
+                jsonOutput.innerText = JSON.stringify(detectedBlocks.slice(0, 5), null, 2) + "\n...and more";
+                processBtn.innerText = "Scan Successful";
+            } catch (err) {
+                alert("OCR Error: " + err.message);
+                processBtn.disabled = false;
+            }
+        };
+
+        finalizeBtn.onclick = async () => {
+            finalizeBtn.disabled = true;
+            finalizeBtn.innerText = "Sending to Render Backend...";
             
             const formData = new FormData();
             formData.append('file', fileElem.files[0]);
+            formData.append('modified_blocks', JSON.stringify(detectedBlocks));
 
             try {
-                const response = await fetch('/scan', { method: 'POST', body: formData });
-                const data = await response.json();
+                const response = await fetch('/process-final', { method: 'POST', body: formData });
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
                 
-                results.classList.remove('hidden');
-                document.getElementById('json-output').innerText = JSON.stringify(data, null, 2);
-                processBtn.innerText = "Scan Complete";
+                document.getElementById('final-img').src = url;
+                document.getElementById('download-link').href = url;
+                document.getElementById('download-link').download = "cleaned_doc.jpg";
+                document.getElementById('final-output-section').classList.remove('hidden');
+                finalizeBtn.innerText = "Processing Complete";
             } catch (err) {
-                alert("Error connecting to Neural Engine");
-                processBtn.disabled = false;
-                processBtn.innerText = "Run Neural Scan";
+                alert("Backend Error: " + err.message);
+                finalizeBtn.disabled = false;
             }
         };
 
